@@ -225,20 +225,21 @@ function loadAllSprites(cb){var keys=Object.keys(SPRITE_SRCS),n=0,total=keys.len
 })();
 // ==== END MUSIC ====
 
-var bgC=document.getElementById('bg'),bgX=bgC.getContext('2d');
+var bgC=document.getElementById('bg');
+var _offC=document.createElement('canvas'); // small drawing canvas (1/4 size)
+var bgX=_offC.getContext('2d');             // all BG drawing goes here
+var _disp=bgC.getContext('2d');             // display canvas - full resolution
+var _labels=[];                             // text labels drawn at full res
 var BW,BH,curBg='garden';
 function initBg(){
   var g=document.getElementById('game');
   var gw=g.offsetWidth||window.innerWidth;
   var gh=g.offsetHeight||window.innerHeight;
   BW=Math.floor(gw/4);BH=Math.floor(gh/4);
-  bgC.width=BW;bgC.height=BH;
-  // Set CSS to EXACT 4x pixel size — forces crisp nearest-neighbor on iOS Safari
-  bgC.style.width=gw+'px';bgC.style.height=gh+'px';
-  bgC.style.imageRendering='pixelated';
-  bgC.getContext('2d').imageSmoothingEnabled=false;
+  _offC.width=BW;_offC.height=BH;         // small drawing canvas
+  bgC.width=gw;bgC.height=gh;             // full display canvas
 }
-window.addEventListener('resize',function(){initBg();bgX.imageSmoothingEnabled=false;renderBg(curBg)});
+window.addEventListener('resize',function(){initBg();renderBg(curBg)});
 initBg();
 
 // ── HELPERS ──
@@ -324,7 +325,7 @@ function drawAyi(cx,by,sz){
   arc(cx-sz*.09,by-sz*.66,sz*.02,'#FFF');arc(cx+sz*.17,by-sz*.66,sz*.02,'#FFF');
   bgX.strokeStyle='#226618';bgX.lineWidth=1.5;bgX.beginPath();bgX.arc(cx,by-sz*.4,sz*.1,.15,Math.PI-.15);bgX.stroke();
   arc(cx-sz*.2,by-sz*.38,sz*.06,'rgba(255,140,140,.6)');arc(cx+sz*.2,by-sz*.38,sz*.06,'rgba(255,140,140,.6)');
-  bgX.font='bold '+Math.max(4,Math.floor(BH*.07))+'px monospace';bgX.imageSmoothingEnabled=false;bgX.fillStyle='#881100';bgX.textAlign='center';bgX.fillText('ayi',Math.floor(cx),Math.floor(by-sz*.82));bgX.textAlign='left';
+  _labels.push({txt:'ayi',x:Math.floor(cx),y:Math.floor(by-sz*.82),col:'#881100',bg:'rgba(255,255,220,.7)',sz:BH*.055});
 }
 function drawJade(cx,by,sz){
   // hedgehog.png 144x96: 6 cols x 4 rows, 24x24 each. Row0 col0 = idle
@@ -337,7 +338,7 @@ function drawJade(cx,by,sz){
   } else {
     arc(cx,by-sz*.35,sz*.3,'#8B5E3C');arc(cx+sz*.25,by-sz*.38,sz*.18,'#C8945A');
   }
-  bgX.font='bold '+Math.max(4,Math.floor(BH*.07))+'px monospace';bgX.imageSmoothingEnabled=false;bgX.fillStyle='#3A1800';bgX.textAlign='center';bgX.fillText('jade',Math.floor(cx),Math.floor(dy-1));bgX.textAlign='left';
+  _labels.push({txt:'jade',x:Math.floor(cx),y:Math.floor(dy-2),col:'#3A1800',bg:'rgba(255,255,220,.7)',sz:BH*.055});
 }
 function drawLuc(cx,by,sz){
   arc(cx-sz*.35,by,sz*.27,'#1a1a1a');arc(cx-sz*.35,by,sz*.21,'#333');
@@ -354,7 +355,7 @@ function drawLuc(cx,by,sz){
   arc(cx+sz*.54,by-sz*.43,sz*.11,'#D8D4C8');arc(cx+sz*.54,by-sz*.43,sz*.08,'#FFFAEE');arc(cx+sz*.54,by-sz*.43,sz*.045,'#FFF');
   R(cx-sz*.18,by-sz*.52,sz*.07,sz*.22,'#E05820');R(cx-sz*.18,by-sz*.32,sz*.07,sz*.16,'#20A8C0');
   bgX.strokeStyle='#555';bgX.lineWidth=BW*.013;bgX.beginPath();bgX.moveTo(cx-sz*.12,by-sz*.1);bgX.lineTo(cx-sz*.5,by-sz*.08);bgX.lineTo(cx-sz*.55,by-sz*.01);bgX.stroke();
-  bgX.font='bold '+Math.max(3,Math.floor(BH*.06))+'px monospace';bgX.fillStyle='#555';bgX.textAlign='center';bgX.fillText('luc',cx,by-sz*.3);bgX.textAlign='left';
+  _labels.push({txt:'luc',x:Math.floor(cx),y:Math.floor(by-sz*.3),col:'#555555',sz:BH*.05});
 }
 function tileGrass(y,h2){
   bgX.imageSmoothingEnabled=false;
@@ -415,7 +416,26 @@ function initSprites(){
 }
 
 // ── BACKGROUNDS ──
-function renderBg(n){curBg=n;bgX.imageSmoothingEnabled=false;if(BG[n])BG[n]()}
+function renderBg(n){
+  curBg=n;_labels=[];
+  bgX.imageSmoothingEnabled=false;
+  if(BG[n])BG[n]();
+  // Scale small canvas → display canvas using JS nearest-neighbor (most reliable cross-browser)
+  _disp.imageSmoothingEnabled=false;
+  _disp.clearRect(0,0,bgC.width,bgC.height);
+  _disp.drawImage(_offC,0,0,bgC.width,bgC.height);
+  // Draw text labels at FULL resolution — crisp on all screens including iOS retina
+  var sc=bgC.width/BW;
+  _disp.textAlign='center';
+  _labels.forEach(function(l){
+    _disp.font='bold '+Math.max(10,Math.floor(l.sz*sc))+'px "Press Start 2P",monospace';
+    _disp.fillStyle=l.bg||'rgba(0,0,0,0)';
+    if(l.bg)_disp.fillText(l.txt,Math.round(l.x*sc)+1,Math.round(l.y*sc)+1);
+    _disp.fillStyle=l.col;
+    _disp.fillText(l.txt,Math.round(l.x*sc),Math.round(l.y*sc));
+  });
+  _disp.textAlign='left';
+}
 var BG={
   garden:function(){
     var w=BW,h=BH,g=bgX.createLinearGradient(0,0,0,h*.55);
