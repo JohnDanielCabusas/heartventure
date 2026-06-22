@@ -17,7 +17,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#1a0a2e;font-family:
 .r-sub{font-size:6px;color:rgba(255,255,255,.5);margin-top:6px;line-height:2}
 #game{display:none;position:relative;width:100vw;height:100dvh;overflow:hidden}
 @media(orientation:landscape){#game{display:block}}
-#bg{position:absolute;left:0;top:0;image-rendering:pixelated;image-rendering:crisp-edges;image-rendering:-webkit-optimize-contrast}
+#bg{position:absolute;inset:0;width:100%!important;height:100%!important;image-rendering:pixelated;image-rendering:crisp-edges}
 #fade{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;z-index:80;transition:opacity .5s}
 #fade.on{opacity:1}
 .scr{position:absolute;inset:0;display:none;z-index:10}
@@ -69,7 +69,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#1a0a2e;font-family:
 #mute-btn:active{transform:scale(.88)}
 @media(orientation:portrait){#mute-btn{display:none}}
 
-#s-dead.on{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px}
+#s-dead.on{display:flex!important;flex-direction:column;align-items:center;justify-content:center;gap:18px}
 .dead-skull{font-size:clamp(40px,10vw,64px);animation:shake .4s ease-in-out infinite alternate}
 @keyframes shake{0%{transform:rotate(-8deg)}100%{transform:rotate(8deg)}}
 .dead-msg{background:rgba(20,0,0,.82);color:#ff5555;font-size:clamp(6px,1.6vw,8px);line-height:2.2;padding:18px 24px;text-align:center;max-width:80vw;border:2px solid #ff4444;box-shadow:0 0 20px rgba(255,0,0,.3)}
@@ -238,21 +238,15 @@ function loadAllSprites(cb){var keys=Object.keys(SPRITE_SRCS),n=0,total=keys.len
 })();
 // ==== END MUSIC ====
 
-var bgC=document.getElementById('bg');
-var _offC=document.createElement('canvas'); // small drawing canvas (1/4 size)
-var bgX=_offC.getContext('2d');             // all BG drawing goes here
-var _disp=bgC.getContext('2d');             // display canvas - full resolution
-var _labels=[];                             // text labels drawn at full res
+var bgC=document.getElementById('bg'),bgX=bgC.getContext('2d'),_labels=[];
 var BW,BH,curBg='garden';
 function initBg(){
-  var g=document.getElementById('game');
-  var gw=g.offsetWidth||window.innerWidth;
-  var gh=g.offsetHeight||window.innerHeight;
-  BW=Math.floor(gw/4);BH=Math.floor(gh/4);
-  _offC.width=BW;_offC.height=BH;         // small drawing canvas
-  bgC.width=gw;bgC.height=gh;             // full display canvas
+  BW=Math.floor(window.innerWidth/4);
+  BH=Math.floor(window.innerHeight/4);
+  bgC.width=BW;bgC.height=BH;
+  bgX.imageSmoothingEnabled=false;
 }
-window.addEventListener('resize',function(){initBg();renderBg(curBg)});
+window.addEventListener('resize',function(){initBg();bgX.imageSmoothingEnabled=false;renderBg(curBg)});
 initBg();
 
 // ── HELPERS ──
@@ -457,21 +451,17 @@ function renderBg(n){
   curBg=n;_labels=[];
   bgX.imageSmoothingEnabled=false;
   if(BG[n])BG[n]();
-  // Scale small canvas → display canvas using JS nearest-neighbor (most reliable cross-browser)
-  _disp.imageSmoothingEnabled=false;
-  _disp.clearRect(0,0,bgC.width,bgC.height);
-  _disp.drawImage(_offC,0,0,bgC.width,bgC.height);
-  // Draw text labels at FULL resolution — crisp on all screens including iOS retina
-  var sc=bgC.width/BW;
-  _disp.textAlign='center';
+  // Draw text labels larger for readability
+  var fs=Math.max(4,Math.floor(BH*.07));
+  bgX.textAlign='center';
   _labels.forEach(function(l){
-    _disp.font='bold '+Math.max(10,Math.floor(l.sz*sc))+'px "Press Start 2P",monospace';
-    _disp.fillStyle=l.bg||'rgba(0,0,0,0)';
-    if(l.bg)_disp.fillText(l.txt,Math.round(l.x*sc)+1,Math.round(l.y*sc)+1);
-    _disp.fillStyle=l.col;
-    _disp.fillText(l.txt,Math.round(l.x*sc),Math.round(l.y*sc));
+    bgX.font='bold '+fs+'px monospace';
+    bgX.fillStyle='rgba(255,255,200,.8)';
+    bgX.fillText(l.txt,Math.floor(l.x)+1,Math.floor(l.y)+1);
+    bgX.fillStyle=l.col;
+    bgX.fillText(l.txt,Math.floor(l.x),Math.floor(l.y));
   });
-  _disp.textAlign='left';
+  bgX.textAlign='left';
 }
 var BG={
   garden:function(){
@@ -603,7 +593,7 @@ var elFade=document.getElementById('fade'),sTitle=document.getElementById('s-tit
 var twTimer=null,phase='title';
 function fadeOut(cb){elFade.classList.add('on');setTimeout(cb,520)}
 function fadeIn(){requestAnimationFrame(function(){requestAnimationFrame(function(){elFade.classList.remove('on')})})}
-function show(el){[sTitle,sGame,sEnd,sDead].forEach(function(s){if(s)s.classList.remove('on')});el.classList.add('on')}
+function show(el){[sTitle,sGame,sEnd].forEach(function(s){if(s)s.classList.remove('on')});el.classList.add('on')}
 function setCat(fx){var gw=document.getElementById('game').offsetWidth;elCat.style.left=Math.max(8,gw*fx-24)+'px'}
 function typewrite(txt,done){
   if(twTimer)clearInterval(twTimer);elTxt.textContent='';var i=0;
@@ -626,10 +616,26 @@ function pick(ch){
   if(phase!=='choosing')return;phase='result';if(ch.k)mem[ch.k]=ch.v;
   elCw.style.opacity='0';setTimeout(function(){elCw.innerHTML='';elCw.style.opacity='1'},320);
   if(ch.next==='dead'){
-    // Oreo death - show death screen
+    renderBg('garden');
+    show(sGame);setCat(.06);
+    elCw.innerHTML='';
+    elDlg.classList.add('on');
+    typewrite('nahulog na ung oreo,\nkinain mo pa rin.\n\nLALA!', null);
     setTimeout(function(){
-      fadeOut(function(){renderBg('garden');show(sDead);fadeIn()});
-    },400);
+      elCw.style.cssText='bottom:86px;top:auto';
+      var b=document.createElement('button');
+      b.className='cq';b.textContent='try again?';
+      b.onclick=function(){
+        mem={};
+        fadeOut(function(){
+          renderBg('garden');show(sGame);setCat(.06);
+          elDlg.classList.add('on');elCw.innerHTML='';
+          typewrite(SCENES[1].dialog,function(){phase='choosing';buildChoices(SCENES[1])});
+          fadeIn();
+        });
+      };
+      elCw.appendChild(b);
+    },2800);
     return;
   }
   if(ch.result){typewrite(ch.result,null);setTimeout(function(){goTo(ch.next)},2200)}else goTo(ch.next);
@@ -646,13 +652,20 @@ document.getElementById('env-el').addEventListener('touchend',function(e){e.prev
 
 loadAllSprites(function(){renderBg('garden');show(sTitle);setCat(.06);initSprites();
 document.getElementById('retry-btn').addEventListener('click',function(){
-  mem={};phase='title';
-  fadeOut(function(){
-    renderBg('garden');show(sGame);setCat(.06);
+  var sd=document.getElementById('s-dead');
+  if(sd)sd.classList.remove('on');
+  mem={};phase='choosing';
+  elFade.classList.add('on');
+  setTimeout(function(){
+    renderBg('garden');
+    [sTitle,sEnd].forEach(function(s){s.classList.remove('on')});
+    sGame.classList.add('on');
+    setCat(.06);
     elDlg.classList.add('on');
+    elCw.innerHTML='';elCw.style.opacity='1';
     typewrite(SCENES[1].dialog,function(){phase='choosing';buildChoices(SCENES[1])});
-    fadeIn();
-  });
+    requestAnimationFrame(function(){requestAnimationFrame(function(){elFade.classList.remove('on')})});
+  },520);
 });});
 </script>
 </body>
