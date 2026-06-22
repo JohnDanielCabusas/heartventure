@@ -17,7 +17,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#1a0a2e;font-family:
 .r-sub{font-size:6px;color:rgba(255,255,255,.5);margin-top:6px;line-height:2}
 #game{display:none;position:relative;width:100vw;height:100dvh;overflow:hidden}
 @media(orientation:landscape){#game{display:block}}
-#bg{position:absolute;inset:0;width:100%!important;height:100%!important;image-rendering:pixelated;image-rendering:crisp-edges}
+#bg{position:absolute;left:0;top:0;image-rendering:pixelated;image-rendering:crisp-edges;image-rendering:-webkit-optimize-contrast}
 #fade{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;z-index:80;transition:opacity .5s}
 #fade.on{opacity:1}
 .scr{position:absolute;inset:0;display:none;z-index:10}
@@ -192,9 +192,16 @@ function loadAllSprites(cb){var keys=Object.keys(SPRITE_SRCS),n=0,total=keys.len
   }
   window.startMusic=function(){
     if(started||!AC)return;started=true;
-    try{ctx=new AC();if(ctx.state==='suspended')ctx.resume();schedule();}catch(e){}
+    try{
+      ctx=new AC();
+      var go=function(){schedule();};
+      if(ctx.state==='suspended'){ctx.resume().then(go).catch(go);}
+      else{go();}
+    }catch(e){}
   };
   window.toggleMute=function(){
+    // Start music if not started yet
+    if(!started&&typeof startMusic==='function'){startMusic();return;}
     muted=!muted;
     var b=document.getElementById('mute-btn');
     if(b)b.textContent=muted?'🔇':'🔊';
@@ -206,8 +213,18 @@ function loadAllSprites(cb){var keys=Object.keys(SPRITE_SRCS),n=0,total=keys.len
 
 var bgC=document.getElementById('bg'),bgX=bgC.getContext('2d');
 var BW,BH,curBg='garden';
-function initBg(){BW=Math.floor(window.innerWidth/4);BH=Math.floor(window.innerHeight/4);bgC.width=BW;bgC.height=BH}
-window.addEventListener('resize',function(){initBg();renderBg(curBg)});
+function initBg(){
+  var g=document.getElementById('game');
+  var gw=g.offsetWidth||window.innerWidth;
+  var gh=g.offsetHeight||window.innerHeight;
+  BW=Math.floor(gw/4);BH=Math.floor(gh/4);
+  bgC.width=BW;bgC.height=BH;
+  // Set CSS to EXACT 4x pixel size — forces crisp nearest-neighbor on iOS Safari
+  bgC.style.width=gw+'px';bgC.style.height=gh+'px';
+  bgC.style.imageRendering='pixelated';
+  bgC.getContext('2d').imageSmoothingEnabled=false;
+}
+window.addEventListener('resize',function(){initBg();bgX.imageSmoothingEnabled=false;renderBg(curBg)});
 initBg();
 
 // ── HELPERS ──
@@ -293,7 +310,7 @@ function drawAyi(cx,by,sz){
   arc(cx-sz*.09,by-sz*.66,sz*.02,'#FFF');arc(cx+sz*.17,by-sz*.66,sz*.02,'#FFF');
   bgX.strokeStyle='#226618';bgX.lineWidth=1.5;bgX.beginPath();bgX.arc(cx,by-sz*.4,sz*.1,.15,Math.PI-.15);bgX.stroke();
   arc(cx-sz*.2,by-sz*.38,sz*.06,'rgba(255,140,140,.6)');arc(cx+sz*.2,by-sz*.38,sz*.06,'rgba(255,140,140,.6)');
-  bgX.font='bold '+Math.max(3,Math.floor(BH*.055))+'px monospace';bgX.fillStyle='#881100';bgX.textAlign='center';bgX.fillText('ayi',cx,by-sz*.82);bgX.textAlign='left';
+  bgX.font='bold '+Math.max(4,Math.floor(BH*.07))+'px monospace';bgX.imageSmoothingEnabled=false;bgX.fillStyle='#881100';bgX.textAlign='center';bgX.fillText('ayi',Math.floor(cx),Math.floor(by-sz*.82));bgX.textAlign='left';
 }
 function drawJade(cx,by,sz){
   // hedgehog.png 144x96: 6 cols x 4 rows, 24x24 each. Row0 col0 = idle
@@ -306,8 +323,7 @@ function drawJade(cx,by,sz){
   } else {
     arc(cx,by-sz*.35,sz*.3,'#8B5E3C');arc(cx+sz*.25,by-sz*.38,sz*.18,'#C8945A');
   }
-  bgX.font='bold '+Math.max(3,Math.floor(BH*.055))+'px monospace';
-  bgX.fillStyle='#4A2808';bgX.textAlign='center';bgX.fillText('jade',cx,dy-2);bgX.textAlign='left';
+  bgX.font='bold '+Math.max(4,Math.floor(BH*.07))+'px monospace';bgX.imageSmoothingEnabled=false;bgX.fillStyle='#3A1800';bgX.textAlign='center';bgX.fillText('jade',Math.floor(cx),Math.floor(dy-1));bgX.textAlign='left';
 }
 function drawLuc(cx,by,sz){
   arc(cx-sz*.35,by,sz*.27,'#1a1a1a');arc(cx-sz*.35,by,sz*.21,'#333');
@@ -385,7 +401,7 @@ function initSprites(){
 }
 
 // ── BACKGROUNDS ──
-function renderBg(n){curBg=n;if(BG[n])BG[n]()}
+function renderBg(n){curBg=n;bgX.imageSmoothingEnabled=false;if(BG[n])BG[n]()}
 var BG={
   garden:function(){
     var w=BW,h=BH,g=bgX.createLinearGradient(0,0,0,h*.55);
