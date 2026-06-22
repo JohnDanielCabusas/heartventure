@@ -141,7 +141,7 @@ function loadAllSprites(cb){var keys=Object.keys(SPRITE_SRCS),n=0,total=keys.len
 // ==== CHIPTUNE MUSIC ====
 (function(){
   var AC=window.AudioContext||window.webkitAudioContext;
-  var ctx=null,muted=false,loopTimer=null,started=false;
+  var ctx=null,masterGain=null,muted=false,loopTimer=null,started=false;
   var N={R:0,
     C3:130.81,D3:146.83,E3:164.81,F3:174.61,G3:196,A3:220,B3:246.94,
     C4:261.63,D4:293.66,E4:329.63,F4:349.23,G4:392,A4:440,B4:493.88,
@@ -171,10 +171,14 @@ function loadAllSprites(cb){var keys=Object.keys(SPRITE_SRCS),n=0,total=keys.len
            'R','E5','R','C5','R','A4','R','R',
            'R','C5','R','E5','R','A5','R','G5',
            'R','G5','R','E5','R','C5','R','R'];
+
+  // All notes route through masterGain → destination
+  // Mute/unmute just changes masterGain.gain — no oscillator restart needed
   function note(f,t,d,tp,v){
-    if(!ctx||!f)return;
+    if(!ctx||!masterGain||!f)return;
     var o=ctx.createOscillator(),g=ctx.createGain();
-    o.connect(g);g.connect(ctx.destination);
+    o.connect(g);
+    g.connect(masterGain); // → masterGain → destination
     o.type=tp;o.frequency.value=f;
     g.gain.setValueAtTime(0,t);
     g.gain.linearRampToValueAtTime(v,t+0.015);
@@ -182,31 +186,41 @@ function loadAllSprites(cb){var keys=Object.keys(SPRITE_SRCS),n=0,total=keys.len
     g.gain.linearRampToValueAtTime(0,t+d);
     o.start(t);o.stop(t+d+0.02);
   }
+
   function schedule(){
-    if(!ctx||muted)return;
+    if(!ctx||!masterGain)return;
     var t=ctx.currentTime+0.05;
     MEL.forEach(function(n,i){note(N[n],t+i*SPD,SPD*.88,'square',.1)});
     BAS.forEach(function(n,i){note(N[n],t+i*SPD,SPD*1.75,'triangle',.065)});
     HAR.forEach(function(n,i){note(N[n],t+i*SPD,SPD*1.6,'sine',.038)});
+    // Schedule next loop
     loopTimer=setTimeout(schedule,(MEL.length*SPD*1000)-120);
   }
+
   window.startMusic=function(){
-    if(started||!AC)return;started=true;
+    if(started||!AC)return;
+    started=true;
     try{
       ctx=new AC();
+      masterGain=ctx.createGain();
+      masterGain.gain.value=1;
+      masterGain.connect(ctx.destination);
       var go=function(){schedule();};
       if(ctx.state==='suspended'){ctx.resume().then(go).catch(go);}
       else{go();}
-    }catch(e){}
+    }catch(e){console.log('Audio error:',e);}
   };
+
   window.toggleMute=function(){
-    // Start music if not started yet
-    if(!started&&typeof startMusic==='function'){startMusic();return;}
+    // If music not started yet, start it on first button press
+    if(!started){startMusic();return;}
     muted=!muted;
     var b=document.getElementById('mute-btn');
     if(b)b.textContent=muted?'🔇':'🔊';
-    if(!muted){clearTimeout(loopTimer);if(ctx)schedule();}
-    else clearTimeout(loopTimer);
+    // Mute/unmute via masterGain only — loop keeps running, no duplication
+    if(masterGain&&ctx){
+      masterGain.gain.setValueAtTime(muted?0:1,ctx.currentTime);
+    }
   };
 })();
 // ==== END MUSIC ====
